@@ -92,3 +92,27 @@ export async function updateRecipeAction(id: string, formData: FormData) {
     throw new Error('Не вдалося оновити рецепт. Спробуйте ще раз.');
   }
 }
+
+// --------------------------- НОВА ФУНКЦІЯ: deleteRecipeAction ---------------------------
+export async function deleteRecipeAction(id: string) {
+  try {
+    await prisma.recipe.delete({
+      where: { id: id },
+    });
+
+    // Після видалення рецепта, ревалідуємо кеш сторінки списку рецептів
+    revalidatePath('/recipes');
+    // Перенаправляємо користувача на сторінку списку рецептів
+    redirect('/recipes');
+
+  } catch (error) {
+    if (isNextRedirectError(error)) {
+      throw error;
+    }
+    console.error('Помилка в Server Action при видаленні рецепта:', error);
+    // Залежно від вашої стратегії обробки помилок, ви можете
+    // або викинути помилку, або повернути об'єкт з помилкою.
+    // Для простоти, поки що викидаємо помилку.
+    throw new Error('Не вдалося видалити рецепт. Спробуйте ще раз.');
+  }
+}

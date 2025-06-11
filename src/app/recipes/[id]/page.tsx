@@ -2,6 +2,7 @@
 import prisma from '@/lib/prisma';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import DeleteRecipeButton from '@/components/recipes/DeleteRecipeButton'; // Імпортуємо нову кнопку
 
 interface RecipeDetailsPageProps {
   params: { id: string };
@@ -21,18 +22,20 @@ export default async function RecipeDetailsPage({ params }: RecipeDetailsPagePro
   return (
     <main style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
       <h1>{recipe.name}</h1>
-      <p>
-        <Link href={`/recipes/${recipe.id}/edit`} style={{ display: 'inline-block', margin: '10px 0', padding: '8px 15px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <Link href={`/recipes/${recipe.id}/edit`} style={{ display: 'inline-block', padding: '8px 15px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
           Редагувати рецепт
         </Link>
-      </p>
+        {/* Додаємо кнопку видалення */}
+        <DeleteRecipeButton recipeId={recipe.id} recipeName={recipe.name} />
+      </div>
 
       {recipe.imageUrl && (
         <img src={recipe.imageUrl} alt={recipe.name} style={{ maxWidth: '100%', height: 'auto', borderRadius: '8px', marginBottom: '20px' }} />
       )}
 
       <h2>Інгредієнти:</h2>
-      <p style={{ whiteSpace: 'pre-wrap' }}>{recipe.ingredients}</p> {/* pre-wrap для збереження форматування */}
+      <p style={{ whiteSpace: 'pre-wrap' }}>{recipe.ingredients}</p>
 
       <h2>Інструкції:</h2>
       <p style={{ whiteSpace: 'pre-wrap' }}>{recipe.instructions}</p>
