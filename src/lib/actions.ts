@@ -1,98 +1,60 @@
 // src/lib/actions.ts
-'use server'; // Ця директива робить весь файл серверним
+'use server';
 
-import { addRecipeToDb, Recipe } from '@/lib/db'; // Імпортуємо нашу імітовану БД
-import { revalidatePath } from 'next/cache'; // Для оновлення кешу Next.js
-import { redirect } from 'next/navigation'; // Для перенаправлення користувача
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation'; // Зверніть увагу, що 'redirect' все ще імпортується звідси
+import prisma from '@/lib/prisma';
 
-interface FormState {
-  message: string;
-  errors: {
-    name?: string[];
-    ingredients?: string[];
-    instructions?: string[];
-    prepTime?: string[];
-    servings?: string[];
-    _form?: string[]; // Загальні помилки форми
-  };
-  success?: boolean; // Додаємо поле для успішного статусу
+// --------------------------- ВИПРАВЛЕНА ЛОГІКА ----------------------------------
+// Функція для перевірки, чи є помилка помилкою перенаправлення Next.js
+function isNextRedirectError(error: any): boolean {
+  // Next.js додає спеціальний digest для помилок перенаправлення.
+  // Він має вигляд `${REDIRECT_ERROR_CODE};${type};${url};${statusCode};`
+  // де REDIRECT_ERROR_CODE = 'NEXT_REDIRECT'
+  return typeof error === 'object' && error !== null && 'digest' in error && typeof error.digest === 'string' && error.digest.includes('NEXT_REDIRECT');
 }
+// -------------------------------------------------------------------------------
 
-// Server Action для додавання рецепта
-export async function addRecipeAction(prevState: FormState, formData: FormData): Promise<FormState> {
-  console.log('Отримано дані форми на сервері:', formData);
 
-  const name = formData.get('name')?.toString().trim();
-  const ingredients = formData.get('ingredients')?.toString().trim();
-  const instructions = formData.get('instructions')?.toString().trim();
-  const prepTimeString = formData.get('prepTime')?.toString().trim();
-  const servingsString = formData.get('servings')?.toString().trim();
+export async function addRecipeAction(formData: FormData) {
+  const name = formData.get('name') as string;
+  const ingredients = formData.get('ingredients') as string;
+  const instructions = formData.get('instructions') as string;
+  const prepTimeMinutes = formData.get('prepTimeMinutes') ? parseInt(formData.get('prepTimeMinutes') as string) : null;
+  const cookTimeMinutes = formData.get('cookTimeMinutes') ? parseInt(formData.get('cookTimeMinutes') as string) : null;
+  const servings = formData.get('servings') ? parseInt(formData.get('servings') as string) : null;
+  const imageUrl = formData.get('imageUrl') as string;
 
-  const errors: FormState['errors'] = {};
-
-  // Валідація
-  if (!name || name.length < 3) {
-    errors.name = ['Назва рецепта має бути не менше 3 символів.'];
-  }
-  if (!ingredients || ingredients.length < 10) {
-    errors.ingredients = ['Інгредієнти мають бути вказані (не менше 10 символів).'];
-  }
-  if (!instructions || instructions.length < 10) {
-    errors.instructions = ['Інструкції мають бути вказані (не менше 10 символів).'];
+  if (!name || !ingredients || !instructions) {
+    throw new Error('Відсутні обов\'язкові поля: назва, інгредієнти, інструкції.');
   }
 
-  let prepTime: number | undefined;
-  if (!prepTimeString || isNaN(parseInt(prepTimeString)) || parseInt(prepTimeString) <= 0) {
-    errors.prepTime = ['Час приготування має бути додатним числом.'];
-  } else {
-    prepTime = parseInt(prepTimeString);
-  }
-
-  let servings: number | undefined;
-  if (!servingsString || isNaN(parseInt(servingsString)) || parseInt(servingsString) <= 0) {
-    errors.servings = ['Кількість порцій має бути додатним числом.'];
-  } else {
-    servings = parseInt(servingsString);
-  }
-
-  // Якщо є помилки валідації, повертаємо їх
-  if (Object.keys(errors).length > 0) {
-    return {
-      message: 'Будь ласка, виправте помилки у формі.',
-      errors,
-      success: false,
-    };
-  }
-
-  // Якщо валідація пройшла успішно, зберігаємо в БД
   try {
-    const newRecipe = await addRecipeToDb({
-      name: name!, // '!' tells TypeScript we know these are not undefined due to validation
-      ingredients: ingredients!,
-      instructions: instructions!,
-      prepTime: prepTime!,
-      servings: servings!,
+    await prisma.recipe.create({
+      data: {
+        name,
+        ingredients,
+        instructions,
+        prepTimeMinutes,
+        cookTimeMinutes,
+        servings,
+        imageUrl,
+      },
     });
 
-    console.log('Рецепт успішно додано:', newRecipe);
+    revalidatePath('/recipes');
+    redirect('/recipes'); // Цей виклик викидає помилку з digest 'NEXT_REDIRECT'
 
-    // Оновлюємо кеш, щоб сторінка зі списком рецептів відобразила новий рецепт
-    revalidatePath('/recipes'); // Припустимо, у вас є сторінка /recipes
-    // redirect('/recipes'); // Можна перенаправити на сторінку списку після додавання
-
-    return {
-      message: `Рецепт "${name}" успішно додано!`,
-      errors: {},
-      success: true, // Вказуємо на успіх
-    };
   } catch (error) {
-    console.error('Помилка при додаванні рецепта:', error);
-    return {
-      message: 'Сталася помилка при збереженні рецепта. Спробуйте ще раз.',
-      errors: {
-        _form: ['Не вдалося додати рецепт через внутрішню помилку.'],
-      },
-      success: false,
-    };
+    // Використовуємо нашу нову функцію для перевірки
+    if (isNextRedirectError(error)) {
+      // Якщо це помилка перенаправлення, просто "прокидаємо" її далі.
+      // Next.js її перехопить і виконає перенаправлення.
+      throw error;
+    }
+
+    // Якщо це справжня помилка, обробляємо її
+    console.error('Помилка в Server Action при додаванні рецепта:', error);
+    throw new Error('Не вдалося додати рецепт. Спробуйте ще раз.');
   }
 }
