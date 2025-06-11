@@ -4,15 +4,14 @@ import Link from 'next/link';
 import prisma from '@/lib/prisma'; // Імпортуємо Prisma
 
 export default async function RecipesPage() {
-  // Завантажуємо рецепти напряму з БД на сервері
   const recipes = await prisma.recipe.findMany({
-    orderBy: { createdAt: 'desc' }, // Сортуємо за датою створення
+    orderBy: { createdAt: 'desc' },
   });
 
   return (
     <main style={{ padding: '20px' }}>
       <h1>Ваші Рецепти</h1>
-      <Link href="/recipes/new" style={{ display: 'inline-block', margin: '10px 0', padding: '8px 15px', backgroundColor: '#007bff', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
+      <Link href="/recipes/new" style={{ display: 'inline-block', margin: '10px 0', padding: '8px 15px', backgroundColor: '#28a745', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
         Додати новий рецепт
       </Link>
 
@@ -23,10 +22,13 @@ export default async function RecipesPage() {
           {recipes.map((recipe) => (
             <div key={recipe.id} style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '15px' }}>
               <h2>{recipe.name}</h2>
+              {recipe.imageUrl && (
+                  <img src={recipe.imageUrl} alt={recipe.name} style={{ maxWidth: '100%', height: '150px', objectFit: 'cover', borderRadius: '4px', marginBottom: '10px' }} />
+              )}
               <p>Інгредієнти: {recipe.ingredients.substring(0, 100)}...</p>
-              <p>Час приготування: {recipe.prepTimeMinutes} хв</p>
+              {/* Змінено посилання на сторінку деталей */}
               <Link href={`/recipes/${recipe.id}`} style={{ color: '#007bff', textDecoration: 'none' }}>
-                Деталі
+                Деталі та редагування
               </Link>
             </div>
           ))}
