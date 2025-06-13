@@ -3,13 +3,14 @@ import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 
-// Імпортуємо наш новий компонент Header
+// Імпортуємо наші компоненти Header та Footer
 import Header from '@/components/layout/Header';
+import Footer from '@/components/layout/Footer'; // <--- НОВИЙ ІМПОРТ
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Feastly - Ваш Планувальник Харчування', // Оновіть назву застосунку
+  title: 'Feastly - Ваш Планувальник Харчування',
   description: 'Керуйте своїми планами харчування та рецептами легко та ефективно.',
 };
 
@@ -21,12 +22,14 @@ export default function RootLayout({
   return (
     <html lang="uk">
       <body className={inter.className}>
-        <Header /> {/* <--- Додайте компонент хедера тут */}
+        <Header />
         
-        {/* Основний контент сторінки. Додамо відступ, щоб контент не ховався за фіксованим хедером */}
-        <main className="pt-20"> {/* <--- Додано padding-top, щоб хедер не перекривав контент */}
+        {/* Основний контент сторінки. Додаємо min-h-screen та flex-grow для правильного позиціонування футера */}
+        <main className="pt-20 flex-grow"> {/* <--- Додано flex-grow */}
           {children}
         </main>
+
+        <Footer /> {/* <--- Додайте компонент футера тут */}
       </body>
     </html>
   );
