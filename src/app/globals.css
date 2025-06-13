@@ -3,10 +3,13 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ваш власний глобальний CSS може йти після цих рядків */
 body {
   font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  /* Додаємо для "липкого" футера */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh; /* Мінімум висоти вікна перегляду */
 }
