@@ -4,6 +4,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import prisma from '@/lib/prisma';
+import { MealType } from '@/types/meal-plan'; // Імпортуємо MealType
 
 // Функція для перевірки, чи є помилка помилкою перенаправлення Next.js
 function isNextRedirectError(error: any): boolean {
@@ -114,5 +115,73 @@ export async function deleteRecipeAction(id: string) {
     // або викинути помилку, або повернути об'єкт з помилкою.
     // Для простоти, поки що викидаємо помилку.
     throw new Error('Не вдалося видалити рецепт. Спробуйте ще раз.');
+  }
+}
+
+// --------------------------- НОВІ ФУНКЦІЇ ДЛЯ MEAL PLAN ENTRIES ---------------------------
+
+interface MealPlanEntryData {
+  mealPlanId: string;
+  recipeId: string;
+  mealDate: string; // YYYY-MM-DD
+  mealType: MealType;
+}
+
+export async function addMealPlanEntryAction(data: MealPlanEntryData) {
+  try {
+    await prisma.mealPlanEntry.create({
+      data: {
+        mealPlan: { connect: { id: data.mealPlanId } },
+        recipe: { connect: { id: data.recipeId } },
+        mealDate: new Date(data.mealDate), // Конвертуємо назад у Date
+        mealType: data.mealType,
+      },
+    });
+
+    // Ревалідуємо шлях до сторінки планувальника, щоб оновити дані
+    revalidatePath('/meal-planner');
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    console.error('Помилка при додаванні запису плану харчування:', error);
+    throw new Error('Не вдалося додати запис до плану харчування. Спробуйте ще раз.');
+  }
+}
+
+interface UpdateMealPlanEntryData {
+  mealPlanId?: string; // Може змінитись
+  recipeId?: string;
+  mealDate?: string;
+  mealType?: MealType;
+}
+
+export async function updateMealPlanEntryAction(id: string, data: UpdateMealPlanEntryData) {
+  try {
+    await prisma.mealPlanEntry.update({
+      where: { id: id },
+      data: {
+        mealPlan: data.mealPlanId ? { connect: { id: data.mealPlanId } } : undefined,
+        recipe: data.recipeId ? { connect: { id: data.recipeId } } : undefined,
+        mealDate: data.mealDate ? new Date(data.mealDate) : undefined,
+        mealType: data.mealType,
+      },
+    });
+    revalidatePath('/meal-planner');
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    console.error('Помилка при оновленні запису плану харчування:', error);
+    throw new Error('Не вдалося оновити запис плану харчування. Спробуйте ще раз.');
+  }
+}
+
+export async function deleteMealPlanEntryAction(id: string) {
+  try {
+    await prisma.mealPlanEntry.delete({
+      where: { id: id },
+    });
+    revalidatePath('/meal-planner');
+  } catch (error) {
+    if (isNextRedirectError(error)) throw error;
+    console.error('Помилка при видаленні запису плану харчування:', error);
+    throw new Error('Не вдалося видалити запис плану харчування. Спробуйте ще раз.');
   }
 }
