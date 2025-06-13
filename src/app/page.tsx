@@ -1,95 +1,209 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+// src/app/page.tsx
+import prisma from '@/lib/prisma';
+import { getStartOfWeekUTC, getYYYYMMDD, formatDayMonth, formatFullDate } from '@/lib/utils';
+import Link from 'next/link';
 
-export default function Home() {
+// Для типів
+import { MealPlanEntry, MealType, Recipe } from '@/types/meal-plan';
+import DashboardCharts from '@/components/dashboard/DashboardCharts'; // <--- НОВИЙ ІМПОРТ
+
+// Helper function to map meal types to display names (винесено, щоб не дублювати)
+const getMealTypeDisplayName = (mealType: MealType): string => {
+  switch (mealType) {
+    case 'breakfast': return 'Сніданок';
+    case 'lunch': return 'Обід';
+    case 'dinner': return 'Вечеря';
+    case 'snack': return 'Перекус';
+    default: return mealType;
+  }
+};
+
+export default async function DashboardPage() {
+  const today = new Date();
+  const startOfCurrentWeek = getStartOfWeekUTC(today);
+
+  const currentMealPlan = await prisma.mealPlan.findFirst({
+    where: {
+      weekStartDate: startOfCurrentWeek,
+      // userId: 'current_user_id', // TODO: Розкоментувати для автентифікації
+    },
+    include: {
+      MealPlanEntry: {
+        include: {
+          recipe: true,
+        },
+        orderBy: {
+            mealDate: 'asc',
+        }
+      },
+    },
+  });
+
+  let totalMealsPlanned = 0;
+  let upcomingMeals: MealPlanEntry[] = [];
+
+  // Дані для чартів
+  const mealTypeCounts: { [key in MealType]?: number } = {
+      breakfast: 0,
+      lunch: 0,
+      dinner: 0,
+      snack: 0,
+  };
+  const mealsPerDayRaw: { [date: string]: number } = {};
+
+  const todayYYYYMMDD = getYYYYMMDD(today);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const tomorrowYYYYMMDD = getYYYYMMDD(tomorrow);
+
+  if (currentMealPlan) {
+    totalMealsPlanned = currentMealPlan.MealPlanEntry.length;
+
+    currentMealPlan.MealPlanEntry.forEach(entry => {
+        // Для чарту типів прийомів їжі
+        mealTypeCounts[entry.mealType] = (mealTypeCounts[entry.mealType] || 0) + 1;
+
+        // Для чарту страв по днях
+        const entryDateStr = getYYYYMMDD(entry.mealDate);
+        mealsPerDayRaw[entryDateStr] = (mealsPerDayRaw[entryDateStr] || 0) + 1;
+    });
+
+    // Фільтруємо майбутні прийоми їжі (сьогодні та завтра)
+    upcomingMeals = currentMealPlan.MealPlanEntry.filter(entry => {
+      const entryDateYYYYMMDD = getYYYYMMDD(entry.mealDate);
+      return entryDateYYYYMMDD === todayYYYYMMDD || entryDateYYYYMMDD === tomorrowYYYYMMDD;
+    })
+    .sort((a, b) => a.mealDate.getTime() - b.mealDate.getTime())
+    .slice(0, 5);
+  }
+
+  // Перетворюємо mealsPerDayRaw у формат, зручний для Recharts (масив об'єктів з датою та лічильником)
+  // Додаємо всі дні тижня, навіть якщо вони не мають страв
+  const mealsPerDayChartData = [];
+  const currentWeekDays = [];
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(startOfCurrentWeek);
+    day.setUTCDate(startOfCurrentWeek.getUTCDate() + i);
+    const dayStr = getYYYYMMDD(day);
+    currentWeekDays.push(dayStr);
+  }
+
+  currentWeekDays.forEach(dayStr => {
+    mealsPerDayChartData.push({
+      date: dayStr,
+      count: mealsPerDayRaw[dayStr] || 0
+    });
+  });
+
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="container mx-auto p-6 bg-gray-50 min-h-screen">
+      <h1 className="text-4xl font-extrabold mb-10 text-cyan-900 text-center">Ваш Персональний Дашборд</h1>
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      {/* Grid Layout для секцій */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Огляд поточного тижня */}
+        <section className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Огляд Тижня</h2>
+          {currentMealPlan ? (
+            <div>
+              <p className="text-lg text-gray-700 leading-relaxed mb-4">
+                На тиждень, що починається <span className="font-bold text-blue-600">{formatFullDate(currentMealPlan.weekStartDate)}</span>,
+                ви запланували <span className="font-bold text-blue-600 text-3xl">{totalMealsPlanned}</span> прийомів їжі.
+              </p>
+              <div className="flex justify-center mt-6">
+                <Link href="/meal-planner" className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-md">
+                  Перейти до Планувальника
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="text-lg text-gray-700 leading-relaxed mb-4">
+                На цей тиждень (починається {formatFullDate(startOfCurrentWeek)}) ще немає створеного плану харчування.
+              </p>
+              <div className="flex justify-center mt-6">
+                <Link href="/meal-planner" className="inline-block bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 ease-in-out transform hover:scale-105 shadow-md">
+                  Створити план на тиждень
+                </Link>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Найближчі прийоми їжі */}
+        <section className="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Наступні прийоми їжі</h2>
+          {upcomingMeals.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white border border-gray-200 rounded-lg">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">День</th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Тип Прийому</th>
+                    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 uppercase tracking-wider">Рецепт</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcomingMeals.map(entry => (
+                    <tr key={entry.id} className="border-t border-gray-200 hover:bg-gray-50">
+                      <td className="py-3 px-4 text-gray-800">
+                        {getYYYYMMDD(entry.mealDate) === todayYYYYMMDD ? 'Сьогодні' : 'Завтра'}
+                      </td>
+                      <td className="py-3 px-4 text-gray-800">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold
+                          ${entry.mealType === 'breakfast' ? 'bg-yellow-100 text-yellow-800' :
+                           entry.mealType === 'lunch' ? 'bg-green-100 text-green-800' :
+                           entry.mealType === 'dinner' ? 'bg-blue-100 text-blue-800' :
+                           'bg-purple-100 text-purple-800'}`
+                        }>
+                          {getMealTypeDisplayName(entry.mealType)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-gray-800 font-medium">
+                        {entry.recipe?.name || 'Без рецепту'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-gray-700">На найближчі дні немає запланованих прийомів їжі.</p>
+          )}
+        </section>
+      </div>
+
+      {/* Швидкі посилання та останні рецепти */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
+        {/* Розділ швидких посилань */}
+        <section className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Швидкі посилання</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link href="/recipes" className="flex items-center justify-center p-4 bg-blue-50 hover:bg-blue-100 rounded-lg text-center font-medium text-blue-700 transition duration-200 shadow-sm hover:shadow-md">
+              <span className="text-xl mr-2">🍽️</span> Переглянути всі Рецепти
+            </Link>
+            <Link href="/recipes/new" className="flex items-center justify-center p-4 bg-green-50 hover:bg-green-100 rounded-lg text-center font-medium text-green-700 transition duration-200 shadow-sm hover:shadow-md">
+              <span className="text-xl mr-2">➕</span> Додати новий Рецепт
+            </Link>
+            {/* TODO: Додати посилання на Список Покупок, якщо буде реалізовано */}
+          </div>
+        </section>
+
+        {/* Розділ "Останні рецепти" (Заглушка) */}
+        <section className="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+          <h2 className="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Останні рецепти</h2>
+          <p className="text-gray-700 leading-relaxed">
+            Цей розділ буде відображати ваші останні додані або переглянуті рецепти. Для повноцінної реалізації потрібно буде додати логіку отримання останніх рецептів з бази даних або збереження їх у профілі користувача.
+          </p>
+        </section>
+      </div>
+
+      {/* Розділ з чартами (винесено в окремий клієнтський компонент) */}
+      <DashboardCharts
+        mealTypeCounts={mealTypeCounts}
+        mealsPerDay={mealsPerDayChartData}
+      />
     </div>
   );
 }
