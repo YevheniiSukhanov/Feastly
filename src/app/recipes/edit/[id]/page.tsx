@@ -1,4 +1,4 @@
-// src/app/recipes/new/page.tsx
+// src/app/recipes/edit/[id]/page.tsx
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
@@ -12,7 +12,7 @@ import { getCompatibleRecipeUnits, ALL_ALLOWED_RECIPE_UNITS } from '@/lib/consta
 interface AvailableIngredient {
   id: string;
   name: string;
-  unit: string; // Базова одиниця інгредієнта (тепер використовується для фільтрації)
+  unit: string; // Базова одиниця інгредієнта
 }
 
 // Тип для інгредієнта, доданого до рецепту
@@ -23,9 +23,37 @@ interface RecipeIngredient {
   unit: string;
 }
 
+// Тип даних, що повертається з GET /api/recipes/[id]
+interface RecipeData {
+  id: string;
+  name: string;
+  instructions: string;
+  prepTimeMinutes: number | null;
+  cookTimeMinutes: number | null;
+  servings: number | null;
+  imageUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  ingredients: {
+    quantity: number;
+    unit: string;
+    ingredient: {
+      id: string;
+      name: string;
+      unit: string;
+    };
+  }[];
+}
 
+interface EditRecipePageProps {
+  params: {
+    id: string;
+  };
+}
 
-export default function CreateRecipePage() {
+export default function EditRecipePage({ params }: EditRecipePageProps) {
+  const { id } = params;
+
   const [name, setName] = useState<string>('');
   const [instructions, setInstructions] = useState<string>('');
   const [prepTimeMinutes, setPrepTimeMinutes] = useState<number | ''>('');
@@ -46,35 +74,62 @@ export default function CreateRecipePage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Ефект для завантаження всіх доступних інгредієнтів з API
+  // Ефект для завантаження даних рецепту та всіх доступних інгредієнтів
   useEffect(() => {
-    const fetchIngredients = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch('/api/ingredients');
-        if (!response.ok) {
-          throw new Error('Не вдалося завантажити інгредієнти.');
+        // 1. Завантажуємо всі доступні інгредієнти
+        const ingredientsResponse = await fetch('/api/ingredients');
+        if (!ingredientsResponse.ok) {
+          throw new Error('Не вдалося завантажити доступні інгредієнти.');
         }
-        const data: AvailableIngredient[] = await response.json();
-        setAvailableIngredients(data);
-        if (data.length > 0) {
-          setCurrentIngredientId(data[0].id); // Встановлюємо перший інгредієнт як вибраний за замовчуванням
-          // Оновлюємо фільтровані одиниці на основі першого інгредієнта
-          const baseUnitOfFirstIngredient = data[0].unit;
-          const compatibleUnits = getCompatibleRecipeUnits(baseUnitOfFirstIngredient);
-          setFilteredRecipeUnits(compatibleUnits);
-          setCurrentUnit(compatibleUnits[0] || ALL_ALLOWED_RECIPE_UNITS[0]); // Встановлюємо першу сумісну або дефолтну
+        const availableIngredientsData: AvailableIngredient[] = await ingredientsResponse.json();
+        setAvailableIngredients(availableIngredientsData);
+        // Встановлюємо перший інгредієнт як вибраний за замовчуванням
+        if (availableIngredientsData.length > 0) {
+            setCurrentIngredientId(availableIngredientsData[0].id);
+            // Ініціалізуємо фільтровані одиниці для першого інгредієнта
+            const baseUnit = availableIngredientsData[0].unit;
+            const compatibleUnits = getCompatibleRecipeUnits(baseUnit);
+            setFilteredRecipeUnits(compatibleUnits);
+            setCurrentUnit(compatibleUnits[0] || ALL_ALLOWED_RECIPE_UNITS[0]);
         } else {
-          setFilteredRecipeUnits([]); // Якщо немає інгредієнтів, то і одиниць немає
+            setFilteredRecipeUnits([]);
         }
+
+        // 2. Завантажуємо дані конкретного рецепту
+        const recipeResponse = await fetch(`/api/recipes/${id}`);
+        if (!recipeResponse.ok) {
+          throw new Error('Не вдалося завантажити рецепт.');
+        }
+        const recipeData: RecipeData = await recipeResponse.json();
+
+        // Заповнюємо поля форми даними рецепту
+        setName(recipeData.name);
+        setInstructions(recipeData.instructions);
+        setPrepTimeMinutes(recipeData.prepTimeMinutes ?? '');
+        setCookTimeMinutes(recipeData.cookTimeMinutes ?? '');
+        setServings(recipeData.servings ?? '');
+        setImageUrl(recipeData.imageUrl ?? '');
+
+        // Заповнюємо selectedRecipeIngredients
+        const initialRecipeIngredients: RecipeIngredient[] = recipeData.ingredients.map(ing => ({
+          ingredientId: ing.ingredient.id,
+          name: ing.ingredient.name,
+          quantity: ing.quantity,
+          unit: ing.unit,
+        }));
+        setSelectedRecipeIngredients(initialRecipeIngredients);
+
       } catch (err: any) {
-        console.error('Error fetching available ingredients:', err);
-        setError(err.message || 'Помилка при завантаженні інгредієнтів.');
+        console.error('Error fetching recipe or ingredients:', err);
+        setError(err.message || 'Помилка при завантаженні даних рецепту.');
       } finally {
         setLoading(false);
       }
     };
-    fetchIngredients();
-  }, []);
+    fetchData();
+  }, [id]);
 
   // Ефект для оновлення фільтрованих одиниць при зміні вибраного інгредієнта
   useEffect(() => {
@@ -89,7 +144,7 @@ export default function CreateRecipePage() {
         }
       }
     }
-  }, [currentIngredientId, availableIngredients]); // Залежить від ID інгредієнта та списку доступних
+  }, [currentIngredientId, availableIngredients]);
 
   const handleAddIngredient = () => {
     setError(null);
@@ -151,8 +206,8 @@ export default function CreateRecipePage() {
     }
 
     try {
-      const response = await fetch('/api/recipes', {
-        method: 'POST',
+      const response = await fetch(`/api/recipes/${id}`, {
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -177,11 +232,38 @@ export default function CreateRecipePage() {
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
-      alert('Рецепт успішно створено!');
+      alert('Рецепт успішно оновлено!');
       router.push('/recipes');
     } catch (err: any) {
-      console.error('Failed to create recipe:', err);
-      setError(err.message || 'Не вдалося створити рецепт. Спробуйте пізніше.');
+      console.error('Failed to update recipe:', err);
+      setError(err.message || 'Не вдалося оновити рецепт. Спробуйте пізніше.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Ви впевнені, що хочете видалити цей рецепт? Цю дію неможливо скасувати.')) {
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/recipes/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
+      alert('Рецепт успішно видалено!');
+      router.push('/recipes');
+    } catch (err: any) {
+      console.error('Failed to delete recipe:', err);
+      setError(err.message || 'Не вдалося видалити рецепт. Спробуйте пізніше.');
     } finally {
       setSubmitting(false);
     }
@@ -190,14 +272,32 @@ export default function CreateRecipePage() {
   if (loading) {
     return (
       <div className="container mx-auto p-4 text-center">
-        <p className="text-xl font-semibold text-gray-700">Завантаження інгредієнтів...</p>
+        <p className="text-xl font-semibold text-gray-700">Завантаження даних рецепту...</p>
+      </div>
+    );
+  }
+
+  if (error && !loading) {
+    return (
+      <div className="container mx-auto p-4 max-w-4xl">
+        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+          <strong className="font-bold">Помилка завантаження!</strong>
+          <span className="block sm:inline"> {error}</span>
+        </div>
+        <div className="flex justify-center mt-6">
+          <Link href="/recipes" legacyBehavior>
+            <a className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-lg transition-colors text-lg">
+              Повернутися до рецептів
+            </a>
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto p-4 max-w-4xl">
-      <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">Створити Новий Рецепт</h1>
+      <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">Редагувати Рецепт</h1>
 
       <form onSubmit={handleSubmit} className="bg-white p-8 rounded-lg shadow-lg">
         {error && (
@@ -385,18 +485,27 @@ export default function CreateRecipePage() {
           </div>
         )}
         
-        <div className="flex justify-between items-center mt-8 pt-6 border-t">
+        {/* Кнопки дій */}
+        <div className="flex flex-col md:flex-row justify-between items-center mt-8 pt-6 border-t gap-4">
           <Link href="/recipes" legacyBehavior>
-            <a className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-lg transition-colors text-lg">
+            <a className="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-6 rounded-lg transition-colors text-lg w-full md:w-auto text-center">
               Скасувати
             </a>
           </Link>
           <button
+            type="button"
+            onClick={handleDelete}
+            disabled={submitting}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-colors text-lg disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
+          >
+            {submitting ? 'Видалення...' : 'Видалити рецепт'}
+          </button>
+          <button
             type="submit"
             disabled={submitting || selectedRecipeIngredients.length === 0}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-colors text-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition-colors text-lg disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto"
           >
-            {submitting ? 'Створення...' : 'Створити рецепт'}
+            {submitting ? 'Оновлення...' : 'Оновити рецепт'}
           </button>
         </div>
       </form>

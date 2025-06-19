@@ -100,7 +100,7 @@ export default async function MealPlannerPage({ searchParams }: MealPlannerPageP
     });
   }
 
-  console.log('Current Meal Plan from DB:', JSON.stringify(currentMealPlan, null, 2));
+  // console.log('Current Meal Plan from DB:', JSON.stringify(currentMealPlan, null, 2));
 
   // Готуємо дані для канбан-дошки
   const daysOfWeekNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'П’ятниця', 'Субота', 'Неділя'];
@@ -121,16 +121,16 @@ export default async function MealPlannerPage({ searchParams }: MealPlannerPageP
       ) as MealPlanEntry[];
 
       // ДОДАЙТЕ ЦІ ЛОГИ:
-      if (entriesForDay.length > 0) {
-        console.log(`Entries for <span class="math-inline">\{dayName\} \(</span>{dateString}):`, JSON.stringify(entriesForDay, null, 2));
-        entriesForDay.forEach(entry => {
-          if (!entry.recipe) {
-            console.warn(`Entry ${entry.id} for ${dayName} has no recipe! recipeId: ${entry.recipeId}`);
-          } else {
-            console.log(`  - Recipe found: ${entry.recipe.name}`);
-          }
-        });
-      }
+      // if (entriesForDay.length > 0) {
+      //   console.log(`Entries for <span class="math-inline">\{dayName\} \(</span>{dateString}):`, JSON.stringify(entriesForDay, null, 2));
+      //   entriesForDay.forEach(entry => {
+      //     if (!entry.recipe) {
+      //       console.warn(`Entry ${entry.id} for ${dayName} has no recipe! recipeId: ${entry.recipeId}`);
+      //     } else {
+      //       console.log(`  - Recipe found: ${entry.recipe.name}`);
+      //     }
+      //   });
+      // }
 
       return {
         date: dateString,
@@ -145,7 +145,7 @@ export default async function MealPlannerPage({ searchParams }: MealPlannerPageP
     }),
   };
 
-  console.log('Final boardData sent to client:', JSON.stringify(boardData, null, 2));
+  // console.log('Final boardData sent to client:', JSON.stringify(boardData, null, 2));
 
   // Обчислюємо дату закінчення тижня для відображення у заголовку
   const endOfWeek = new Date(startOfWeek);
