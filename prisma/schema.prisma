@@ -9,50 +9,86 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Ingredient {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  unit        String // Одиниця виміру інгредієнта (наприклад, "кг", "шт", "л")
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Зв'язок з проміжною таблицею IngredientOnRecipe
+  recipes IngredientOnRecipe[] // Поле, що показує, в яких рецептах використовується цей інгредієнт
+}
+
 model Recipe {
-  id                String    @id @default(uuid()) @db.VarChar(255)
-  name              String    @db.VarChar(255)
-  ingredients       String    @db.Text // Зберігаємо як текст
-  instructions      String    @db.Text
-  prepTimeMinutes   Int?
-  cookTimeMinutes   Int?
-  servings          Int?
-  imageUrl          String?   @map("image_url") @db.VarChar(255) // Optional field
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  name            String
+  // !!! ВАЖЛИВО: ВИДАЛІТЬ ЦЕЙ РЯДОК, ЯКЩО ВІН ІСНУЄ:
+  // ingredientsJson Json? // АБО ingredients String? - це старе поле, воно більше не потрібне
+  instructions    String
+  prepTimeMinutes Int?
+  cookTimeMinutes Int?
+  servings        Int?
+  imageUrl        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  MealPlanEntry MealPlanEntry[] // Зв'язок з MealPlanEntry
+  // !!! ВАЖЛИВО: ПЕРЕКОНАЙТЕСЯ, ЩО ЦЕЙ РЯДОК ІСНУЄ:
+  // Зв'язок з проміжною таблицею IngredientOnRecipe
+  ingredients IngredientOnRecipe[] // Поле, що показує, які інгредієнти входять до цього рецепта
+
+  // !!! ДОДАЙТЕ ЦЕЙ РЯДОК: Зворотний зв'язок для MealPlanEntry
+  mealPlanEntries MealPlanEntry[]
 }
 
+// Проміжна таблиця для зв'язку "багато-до-багатьох" між Recipe та Ingredient
+model IngredientOnRecipe {
+  ingredientId String
+  recipeId     String
+  quantity     Float // Кількість інгредієнта в цьому конкретному рецепті (наприклад, 200)
+  unit         String // Одиниця виміру для цього рецепта (наприклад, "г", "шт", "ст.л.")
+  // Може відрізнятись від Ingredient.unit для гнучкості (наприклад, 1 "шт." яблука, але 100 "г." в рецепті)
+
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+  recipe     Recipe     @relation(fields: [recipeId], references: [id])
+
+  @@id([ingredientId, recipeId]) // Композитний первинний ключ для унікальності зв'язку
+}
+
+// Модель MealPlan (без змін)
 model MealPlan {
-  id             String          @id @default(uuid()) @db.VarChar(255)
-  userId         String?         @map("user_id") @db.VarChar(255) // Optional
-  planName       String          @map("plan_name") @db.VarChar(255)
-  weekStartDate  DateTime        @map("week_start_date") @db.Date // DATE type in MySQL
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  id            String   @id @default(uuid()) @db.VarChar(255)
+  userId        String?  @map("user_id") @db.VarChar(255)
+  planName      String   @map("plan_name") @db.VarChar(255)
+  weekStartDate DateTime @map("week_start_date") @db.Date // DATE type in MySQL
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  MealPlanEntry MealPlanEntry[] // Зв'язок з MealPlanEntry
+  MealPlanEntry MealPlanEntry[]
 }
 
+// Модель MealPlanEntry (без змін)
 model MealPlanEntry {
-  id           String    @id @default(uuid()) @db.VarChar(255)
-  mealPlanId   String    @map("meal_plan_id") @db.VarChar(255)
-  recipeId     String?   @map("recipe_id") @db.VarChar(255) // Optional
+  id         String  @id @default(uuid()) @db.VarChar(255)
+  mealPlanId String  @map("meal_plan_id") @db.VarChar(255)
+  recipeId   String? @map("recipe_id") @db.VarChar(255)
 
-  mealDate     DateTime  @map("meal_date") @db.Date // DATE type in MySQL
-  mealType     MealType  @map("meal_type") // ENUM type
+  mealDate DateTime @map("meal_date") @db.Date // DATE type in MySQL
+  mealType MealType @map("meal_type") // ENUM type
 
-  mealPlan     MealPlan  @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
-  recipe       Recipe?   @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  mealPlan MealPlan @relation(fields: [mealPlanId], references: [id], onDelete: Cascade)
+  recipe   Recipe?  @relation(fields: [recipeId], references: [id], onDelete: SetNull)
 
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([mealPlanId, mealDate, mealType]) // Унікальність: один тип прийому їжі на дату в плані
   @@map("meal_plan_entries") // Назва таблиці в БД
 }
 
+// Enum MealType (без змін)
 enum MealType {
   breakfast
   lunch

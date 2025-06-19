@@ -1,45 +1,40 @@
-// src/components/layout/Header.tsx
+// src/components/layout/Header.tsx (Приклад, адаптуйте до свого коду)
+'use client'; // Цей компонент має бути клієнтським, якщо містить інтерактивність
+
 import Link from 'next/link';
-import React from 'react';
+import { usePathname } from 'next/navigation'; // Для виділення активної вкладки
 
 export default function Header() {
+  const pathname = usePathname();
+
+  const navItems = [
+    { href: '/', label: 'Головна' },
+    { href: '/recipes', label: 'Рецепти' },
+    { href: '/meal-planner', label: 'Планувальник їжі' },
+    { href: '/ingredients', label: 'Інгредієнти' }, // НОВЕ посилання
+  ];
+
   return (
-    <header className="bg-white shadow-md py-4 px-6 fixed top-0 left-0 w-full z-50">
-      <div className="container mx-auto flex justify-between items-center">
-        {/* Логотип або назва застосунку */}
-        <Link href="/" className="text-2xl font-bold text-gray-800 hover:text-blue-600 transition-colors duration-200">
+    <header className="bg-gradient-to-r from-green-500 to-lime-600 p-4 shadow-md">
+      <nav className="container mx-auto flex justify-between items-center">
+        <Link href="/" className="text-white text-2xl font-bold hover:text-gray-100 transition-colors">
           Feastly
         </Link>
-
-        {/* Навігаційні посилання */}
-        <nav>
-          <ul className="flex space-x-6">
-            <li>
-              <Link href="/" className="text-gray-700 hover:text-blue-600 text-lg font-medium transition-colors duration-200">
-                Дашборд
+        <ul className="flex space-x-6">
+          {navItems.map((item) => (
+            <li key={item.href}>
+              <Link
+                href={item.href}
+                className={`text-white text-lg font-medium hover:text-gray-100 transition-colors ${
+                  pathname === item.href ? 'border-b-2 border-white' : ''
+                }`}
+              >
+                {item.label}
               </Link>
             </li>
-            <li>
-              <Link href="/meal-planner" className="text-gray-700 hover:text-blue-600 text-lg font-medium transition-colors duration-200">
-                Планувальник
-              </Link>
-            </li>
-            <li>
-              <Link href="/recipes" className="text-gray-700 hover:text-blue-600 text-lg font-medium transition-colors duration-200">
-                Рецепти
-              </Link>
-            </li>
-            {/* Додайте інші посилання, якщо у вас будуть інші основні сторінки */}
-          </ul>
-        </nav>
-
-        {/* Місце для майбутніх елементів, наприклад, кнопки логіну/профілю */}
-        {/* <div className="hidden md:block">
-          <button className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
-            Мій Профіль
-          </button>
-        </div> */}
-      </div>
+          ))}
+        </ul>
+      </nav>
     </header>
   );
 }
