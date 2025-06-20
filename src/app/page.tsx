@@ -82,6 +82,7 @@ export default async function DashboardPage() {
           // Для чарту страв по днях
           mealsPerDayRaw[entryDateStr] = (mealsPerDayRaw[entryDateStr] || 0) + 1;
 
+          const entryDateYYYYMMDD = getYYYYMMDD(entry.mealDate); // <<< Додайте цей рядок
           // Фільтруємо майбутні прийоми їжі (сьогодні та завтра)
           if (entryDateYYYYMMDD === todayYYYYMMDD || entryDateYYYYMMDD === tomorrowYYYYMMDD) {
               upcomingMeals.push({
