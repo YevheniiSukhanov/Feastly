@@ -8,11 +8,12 @@ import MealSector from './MealSector';
 interface DayColumnProps {
   day: BoardDay; // Тут day.name вже міститиме "Понеділок\n6 січня"
   currentMealPlanId: string;
+  // Додаємо новий пропс
+  onRemoveRecipeFromSlot: (mealPlanEntryId: string, recipeId: string) => Promise<void>;
 }
 
-function DayColumn({ day, currentMealPlanId }: DayColumnProps) {
+function DayColumn({ day, currentMealPlanId, onRemoveRecipeFromSlot }: DayColumnProps) {
   // Розбиваємо назву дня на дві частини для відображення
-  // (Назва дня та дата вже об'єднані в page.tsx для зручності)
   const [dayName, dayDate] = day.name.split('\n');
 
   return (
@@ -31,7 +32,6 @@ function DayColumn({ day, currentMealPlanId }: DayColumnProps) {
       <h3 style={{ textAlign: 'center', marginBottom: '15px', lineHeight: '1.2' }}>
         {dayName}
         <br />
-        {/* Виправлення 3: Використовуємо вже відформатовану дату з day.name */}
         <span style={{ fontSize: '0.8em', color: '#666' }}>{dayDate}</span>
       </h3>
       <MealSector
@@ -39,24 +39,28 @@ function DayColumn({ day, currentMealPlanId }: DayColumnProps) {
         mealType="breakfast"
         entries={day.meals.breakfast}
         currentMealPlanId={currentMealPlanId}
+        onRemoveRecipeFromSlot={onRemoveRecipeFromSlot} // Передаємо далі
       />
       <MealSector
         day={day}
         mealType="lunch"
         entries={day.meals.lunch}
         currentMealPlanId={currentMealPlanId}
+        onRemoveRecipeFromSlot={onRemoveRecipeFromSlot} // Передаємо далі
       />
       <MealSector
         day={day}
         mealType="dinner"
         entries={day.meals.dinner}
         currentMealPlanId={currentMealPlanId}
+        onRemoveRecipeFromSlot={onRemoveRecipeFromSlot} // Передаємо далі
       />
       <MealSector
         day={day}
         mealType="snack"
         entries={day.meals.snack}
         currentMealPlanId={currentMealPlanId}
+        onRemoveRecipeFromSlot={onRemoveRecipeFromSlot} // Передаємо далі
       />
     </div>
   );

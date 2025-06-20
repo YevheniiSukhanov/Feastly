@@ -47,3 +47,11 @@ export function formatDayMonth(dateInput: string | Date): string {
 export function formatFullDate(date: Date): string {
   return new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
+
+// Нова або оновлена функція для отримання дати початку дня в UTC
+export function getStartOfDayUTC(dateString: string): Date {
+  // Розбиваємо рядок YYYY-MM-DD
+  const [year, month, day] = dateString.split('-').map(Number);
+  // Створюємо дату в UTC (місяці в JS з 0)
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+}

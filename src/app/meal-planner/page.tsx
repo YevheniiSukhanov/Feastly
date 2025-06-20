@@ -1,18 +1,8 @@
 // src/app/meal-planner/page.tsx
 import prisma from '@/lib/prisma';
 import MealPlanBoard from '@/components/meal-planner/MealPlanBoard';
-import { MealPlanBoardState, Recipe, MealPlanEntry, MealType, BoardDay } from '@/types/meal-plan';
-import { notFound } from 'next/navigation';
-
-// Допоміжна функція для отримання дати початку тижня (понеділок)
-function getStartOfWeek(date: Date): Date {
-  const d = new Date(date); // Створюємо копію, щоб не змінювати оригінальний об'єкт
-  const day = d.getDay(); // 0 = неділя, 1 = понеділок ... 6 = субота
-  const diff = day === 0 ? 6 : day - 1; // Кількість днів назад до понеділка
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0); // Обнуляємо час для консистентності (локальний час)
-  return d;
-}
+// Оновіть імпорт, щоб він відображав нову структуру типів
+import { MealPlanBoardState, Recipe, MealPlanEntry, MealType, BoardDay, MealPlanEntryRecipe } from '@/types/meal-plan';
 
 // Допоміжна функція для форматування дати у "день місяць" (наприклад, "6 січня")
 function formatDate(date: Date): string {
@@ -46,91 +36,79 @@ interface MealPlannerPageProps {
 }
 
 export default async function MealPlannerPage({ searchParams }: MealPlannerPageProps) {
-  let baseDateForWeekCalculation = new Date(); // Початкова дата за замовчуванням - поточний день
+  let baseDateForWeekCalculation = new Date();
 
-  // Виправлення 1: Більш безпечний доступ до searchParams
   const weekParam = searchParams?.week;
   if (weekParam) {
     try {
-      const parsedDate = new Date(weekParam);
-      // Перевіряємо, чи дата коректна (не Invalid Date)
+      const parsedDate = new Date(weekParam + 'T00:00:00Z'); // Парсимо як UTC
       if (!isNaN(parsedDate.getTime())) {
         baseDateForWeekCalculation = parsedDate;
       }
     } catch (e) {
       console.error("Invalid 'week' search param:", weekParam, e);
-      // Якщо параметр недійсний, продовжуємо з поточною датою
     }
   }
 
-  // Завантажуємо всі доступні рецепти
   const availableRecipes = await prisma.recipe.findMany({
     orderBy: { name: 'asc' },
   });
 
-  const startOfWeek = getStartOfWeekUTC(baseDateForWeekCalculation); // ВИКОРИСТОВУЄМО UTC ФУНКЦІЮ
+  const startOfWeek = getStartOfWeekUTC(baseDateForWeekCalculation);
 
-
-  // Шукаємо або створюємо план харчування для цього тижня
   let currentMealPlan = await prisma.mealPlan.findFirst({
     where: {
-      weekStartDate: startOfWeek, // Тепер шукаємо за UTC датою
-      // userId: 'current_user_id',
+      weekStartDate: startOfWeek,
+      // userId: 'current_user_id', // Якщо ви використовуєте автентифікацію
     },
     include: {
       MealPlanEntry: {
         include: {
-          recipe: true,
+          recipes: { // Включаємо проміжну таблицю
+            include: {
+              recipe: true, // Включаємо сам об'єкт рецепту
+            },
+          },
         },
       },
     },
   });
 
-  // Якщо план на цей тиждень не знайдено, створюємо новий
   if (!currentMealPlan) {
     currentMealPlan = await prisma.mealPlan.create({
       data: {
         planName: `План на тиждень з ${formatDate(startOfWeek)}`,
-        weekStartDate: startOfWeek, // Зберігаємо UTC дату
+        weekStartDate: startOfWeek,
         // userId: 'current_user_id',
       },
       include: {
-        MealPlanEntry: { include: { recipe: true } },
+        MealPlanEntry: {
+          include: {
+            recipes: { // Включаємо проміжну таблицю
+              include: {
+                recipe: true, // Включаємо сам об'єкт рецепту
+              },
+            },
+          },
+        },
       },
     });
   }
 
-  // console.log('Current Meal Plan from DB:', JSON.stringify(currentMealPlan, null, 2));
-
-  // Готуємо дані для канбан-дошки
   const daysOfWeekNames = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'П’ятниця', 'Субота', 'Неділя'];
-  
+
   const boardData: MealPlanBoardState = {
     availableRecipes: availableRecipes,
     currentMealPlanId: currentMealPlan.id,
-    weekStartDate: getYYYYMMDD(startOfWeek), // Для відображення все одно YYYY-MM-DD
+    weekStartDate: getYYYYMMDD(startOfWeek),
     currentWeekPlan: daysOfWeekNames.map((dayName, index) => {
-      const date = new Date(startOfWeek); // Базуємось на UTC даті початку тижня
-      date.setDate(startOfWeek.getDate() + index); // Тут все одно додаємо дні
+      const date = new Date(startOfWeek);
+      date.setUTCDate(startOfWeek.getUTCDate() + index); // Використовуємо setUTCDate для UTC
       const dateString = getYYYYMMDD(date);
 
-      // Виправлення 4: Використовуємо getYYYYMMDD для фільтрації записів за датою
       const entriesForDay: MealPlanEntry[] = currentMealPlan!.MealPlanEntry.filter(
-        // Порівнюємо дати записів (які з БД приходять як UTC) з нашими UTC-базованими датами
         (entry) => getYYYYMMDD(entry.mealDate) === dateString
       ) as MealPlanEntry[];
-
-      // ДОДАЙТЕ ЦІ ЛОГИ:
-      // if (entriesForDay.length > 0) {
-      //   console.log(`Entries for <span class="math-inline">\{dayName\} \(</span>{dateString}):`, JSON.stringify(entriesForDay, null, 2));
-      //   entriesForDay.forEach(entry => {
-      //     if (!entry.recipe) {
-      //       console.warn(`Entry ${entry.id} for ${dayName} has no recipe! recipeId: ${entry.recipeId}`);
-      //     } else {
-      //       console.log(`  - Recipe found: ${entry.recipe.name}`);
-      //     }
-      //   });
-      // }
 
       return {
         date: dateString,
@@ -145,11 +123,8 @@ export default async function MealPlannerPage({ searchParams }: MealPlannerPageP
     }),
   };
 
-  // console.log('Final boardData sent to client:', JSON.stringify(boardData, null, 2));
-
-  // Обчислюємо дату закінчення тижня для відображення у заголовку
   const endOfWeek = new Date(startOfWeek);
-  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  endOfWeek.setUTCDate(startOfWeek.getUTCDate() + 6); // Використовуємо setUTCDate для UTC
 
   const weekDisplay = `${formatDate(startOfWeek)} - ${formatDate(endOfWeek)}`;
 
@@ -158,7 +133,7 @@ export default async function MealPlannerPage({ searchParams }: MealPlannerPageP
       <h1 style={{ textAlign: 'center', marginBottom: '10px' }}>Планувальник Меню</h1>
       <MealPlanBoard
         initialData={boardData}
-        currentWeekStartDate={getYYYYMMDD(startOfWeek)} // Передаємо у форматі YYYY-MM-DD
+        currentWeekStartDate={getYYYYMMDD(startOfWeek)}
         weekDisplay={weekDisplay}
       />
     </main>
