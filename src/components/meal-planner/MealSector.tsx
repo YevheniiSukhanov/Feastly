@@ -5,13 +5,16 @@ import React from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { BoardDay, MealPlanEntry, MealType } from '@/types/meal-plan';
 import DraggableMealEntry from './DraggableMealEntry';
-import { deleteMealPlanEntryAction } from '@/lib/actions';
+// Ми не викликаємо Server Action напряму тут, тільки через пропс
+// import { deleteMealPlanEntryAction } from '@/lib/actions'; // Це більше не використовується напряму
 
 interface MealSectorProps {
   day: BoardDay;
   mealType: MealType;
-  entries: MealPlanEntry[];
+  entries: MealPlanEntry[]; // Тепер це завжди 0 або 1 MealPlanEntry
   currentMealPlanId: string;
+  // Додаємо пропс для обробки видалення рецепта
+  onRemoveRecipeFromSlot: (mealPlanEntryId: string, recipeId: string) => Promise<void>;
 }
 
 const mealTypeLabels: Record<MealType, string> = {
@@ -21,7 +24,7 @@ const mealTypeLabels: Record<MealType, string> = {
   snack: 'Перекус',
 };
 
-function MealSector({ day, mealType, entries, currentMealPlanId }: MealSectorProps) {
+function MealSector({ day, mealType, entries, currentMealPlanId, onRemoveRecipeFromSlot }: MealSectorProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `${day.date}-${mealType}`, // Унікальний ID для цілі скидання
     data: {
@@ -32,14 +35,10 @@ function MealSector({ day, mealType, entries, currentMealPlanId }: MealSectorPro
     },
   });
 
-  const handleDeleteEntry = async (entryId: string) => {
-    if (window.confirm('Ви впевнені, що хочете видалити цей запис прийому їжі?')) {
-      try {
-        await deleteMealPlanEntryAction(entryId);
-      } catch (error) {
-        console.error('Failed to delete meal entry:', error);
-        alert('Помилка при видаленні запису.');
-      }
+  // Ця функція тепер видаляє КОНКРЕТНИЙ рецепт з MealPlanEntry
+  const handleRemoveRecipe = async (mealPlanEntryId: string, recipeId: string) => {
+    if (window.confirm('Ви впевнені, що хочете видалити цей рецепт зі слоту?')) {
+      await onRemoveRecipeFromSlot(mealPlanEntryId, recipeId);
     }
   };
 
@@ -60,10 +59,16 @@ function MealSector({ day, mealType, entries, currentMealPlanId }: MealSectorPro
       }}
     >
       <h4>{mealTypeLabels[mealType]}</h4>
+      {/* Тепер 'entries' містить один MealPlanEntry, який, своєю чергою, містить масив recipes */}
       {entries.length === 0 && <p style={{ fontSize: '0.9em', color: '#888' }}>Перетягніть сюди рецепт</p>}
-      {entries.map(entry => (
-        <DraggableMealEntry key={entry.id} entry={entry} onDelete={handleDeleteEntry} />
-      ))}
+
+      {entries.length > 0 && (
+        <DraggableMealEntry
+          // MealPlanEntry ID є унікальним ID для перетягування
+          entry={entries[0]} // Ми припускаємо, що тут завжди максимум один MealPlanEntry
+          onDelete={(recipeIdToDelete: string) => handleRemoveRecipe(entries[0].id, recipeIdToDelete)}
+        />
+      )}
     </div>
   );
 }

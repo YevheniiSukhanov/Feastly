@@ -4,8 +4,9 @@ import { getStartOfWeekUTC, getYYYYMMDD, formatDayMonth, formatFullDate } from '
 import Link from 'next/link';
 
 // Для типів
-import { MealPlanEntry, MealType, Recipe } from '@/types/meal-plan';
-import DashboardCharts from '@/components/dashboard/DashboardCharts'; // <--- НОВИЙ ІМПОРТ
+// Оновіть імпорт, щоб відображати нову структуру типів
+import { MealPlanEntry, MealType, Recipe, MealPlanEntryRecipe } from '@/types/meal-plan';
+import DashboardCharts from '@/components/dashboard/DashboardCharts';
 
 // Helper function to map meal types to display names (винесено, щоб не дублювати)
 const getMealTypeDisplayName = (mealType: MealType): string => {
@@ -30,7 +31,11 @@ export default async function DashboardPage() {
     include: {
       MealPlanEntry: {
         include: {
-          recipe: true,
+          recipes: { // !!! ЗМІНЕНО ТУТ: Включаємо проміжну таблицю
+            include: {
+              recipe: true, // Включаємо сам об'єкт рецепту
+            },
+          },
         },
         orderBy: {
             mealDate: 'asc',
@@ -40,7 +45,13 @@ export default async function DashboardPage() {
   });
 
   let totalMealsPlanned = 0;
-  let upcomingMeals: MealPlanEntry[] = [];
+  // upcomingMeals тепер буде масивом об'єктів, які містять MealPlanEntry та пов'язані з ним Recipe
+  // щоб було зручно відображати кілька рецептів для одного слоту
+  type UpcomingMealItem = {
+    mealEntry: MealPlanEntry;
+    recipe: Recipe;
+  };
+  let upcomingMeals: UpcomingMealItem[] = [];
 
   // Дані для чартів
   const mealTypeCounts: { [key in MealType]?: number } = {
@@ -57,28 +68,44 @@ export default async function DashboardPage() {
   const tomorrowYYYYMMDD = getYYYYMMDD(tomorrow);
 
   if (currentMealPlan) {
-    totalMealsPlanned = currentMealPlan.MealPlanEntry.length;
+    // totalMealsPlanned тепер буде сумою ВСІХ рецептів у плані, а не кількістю MealPlanEntry
+    totalMealsPlanned = currentMealPlan.MealPlanEntry.reduce((acc, entry) => acc + entry.recipes.length, 0);
 
     currentMealPlan.MealPlanEntry.forEach(entry => {
-        // Для чарту типів прийомів їжі
-        mealTypeCounts[entry.mealType] = (mealTypeCounts[entry.mealType] || 0) + 1;
-
-        // Для чарту страв по днях
         const entryDateStr = getYYYYMMDD(entry.mealDate);
-        mealsPerDayRaw[entryDateStr] = (mealsPerDayRaw[entryDateStr] || 0) + 1;
+
+        // Перебираємо ВСІ рецепти в кожному MealPlanEntry
+        entry.recipes.forEach(entryRecipe => {
+          // Для чарту типів прийомів їжі
+          mealTypeCounts[entry.mealType] = (mealTypeCounts[entry.mealType] || 0) + 1;
+
+          // Для чарту страв по днях
+          mealsPerDayRaw[entryDateStr] = (mealsPerDayRaw[entryDateStr] || 0) + 1;
+
+          // Фільтруємо майбутні прийоми їжі (сьогодні та завтра)
+          if (entryDateYYYYMMDD === todayYYYYMMDD || entryDateYYYYMMDD === tomorrowYYYYMMDD) {
+              upcomingMeals.push({
+                mealEntry: entry,
+                recipe: entryRecipe.recipe // Зверніть увагу: recipe знаходиться всередині entryRecipe
+              });
+          }
+        });
     });
 
-    // Фільтруємо майбутні прийоми їжі (сьогодні та завтра)
-    upcomingMeals = currentMealPlan.MealPlanEntry.filter(entry => {
-      const entryDateYYYYMMDD = getYYYYMMDD(entry.mealDate);
-      return entryDateYYYYMMDD === todayYYYYMMDD || entryDateYYYYMMDD === tomorrowYYYYMMDD;
+    // Сортуємо майбутні прийоми їжі
+    upcomingMeals.sort((a, b) => {
+        // Спочатку за датою
+        const dateComparison = a.mealEntry.mealDate.getTime() - b.mealEntry.mealDate.getTime();
+        if (dateComparison !== 0) return dateComparison;
+
+        // Потім за типом прийому їжі (якщо потрібно специфічне сортування: сніданок, обід, вечеря, перекус)
+        const mealTypeOrder: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+        return mealTypeOrder.indexOf(a.mealEntry.mealType) - mealTypeOrder.indexOf(b.mealEntry.mealType);
     })
-    .sort((a, b) => a.mealDate.getTime() - b.mealDate.getTime())
-    .slice(0, 5);
+    .slice(0, 5); // Обмежуємо 5-ма найближчими
   }
 
   // Перетворюємо mealsPerDayRaw у формат, зручний для Recharts (масив об'єктів з датою та лічильником)
-  // Додаємо всі дні тижня, навіть якщо вони не мають страв
   const mealsPerDayChartData = [];
   const currentWeekDays = [];
   for (let i = 0; i < 7; i++) {
@@ -145,23 +172,25 @@ export default async function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {upcomingMeals.map(entry => (
-                    <tr key={entry.id} className="border-t border-gray-200 hover:bg-gray-50">
+                  {/* Тепер ітеруємо по upcomingMeals, який містить як MealPlanEntry, так і Recipe */}
+                  {upcomingMeals.map((item, index) => (
+                    <tr key={`${item.mealEntry.id}-${item.recipe.id}-${index}`} className="border-t border-gray-200 hover:bg-gray-50">
                       <td className="py-3 px-4 text-gray-800">
-                        {getYYYYMMDD(entry.mealDate) === todayYYYYMMDD ? 'Сьогодні' : 'Завтра'}
+                        {getYYYYMMDD(item.mealEntry.mealDate) === todayYYYYMMDD ? 'Сьогодні' : 'Завтра'}
                       </td>
                       <td className="py-3 px-4 text-gray-800">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold
-                          ${entry.mealType === 'breakfast' ? 'bg-yellow-100 text-yellow-800' :
-                           entry.mealType === 'lunch' ? 'bg-green-100 text-green-800' :
-                           entry.mealType === 'dinner' ? 'bg-blue-100 text-blue-800' :
-                           'bg-purple-100 text-purple-800'}`
+                          ${item.mealEntry.mealType === 'breakfast' ? 'bg-yellow-100 text-yellow-800' :
+                            item.mealEntry.mealType === 'lunch' ? 'bg-green-100 text-green-800' :
+                            item.mealEntry.mealType === 'dinner' ? 'bg-blue-100 text-blue-800' :
+                            'bg-purple-100 text-purple-800'}`
                         }>
-                          {getMealTypeDisplayName(entry.mealType)}
+                          {getMealTypeDisplayName(item.mealEntry.mealType)}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-gray-800 font-medium">
-                        {entry.recipe?.name || 'Без рецепту'}
+                        {/* Доступ до назви рецепту через item.recipe.name */}
+                        {item.recipe.name}
                       </td>
                     </tr>
                   ))}

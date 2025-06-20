@@ -5,10 +5,18 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import prisma from '@/lib/prisma';
 import { MealType } from '@/types/meal-plan'; // Імпортуємо MealType
+import { getStartOfDayUTC, getYYYYMMDD } from './utils'; // Імпортуйте getStartOfDayUTC
 
 // Функція для перевірки, чи є помилка помилкою перенаправлення Next.js
 function isNextRedirectError(error: any): boolean {
   return typeof error === 'object' && error !== null && 'digest' in error && typeof error.digest === 'string' && error.digest.includes('NEXT_REDIRECT');
+}
+
+// Оновлення типу для ClearMealPlanSlotProps: mealDate тепер має бути Date
+interface ClearMealPlanSlotProps {
+  mealPlanId: string;
+  mealDate: Date; // Змінено на Date
+  mealType: MealType;
 }
 
 export async function addRecipeAction(formData: FormData) {
@@ -118,70 +126,100 @@ export async function deleteRecipeAction(id: string) {
   }
 }
 
-// --------------------------- НОВІ ФУНКЦІЇ ДЛЯ MEAL PLAN ENTRIES ---------------------------
+// --------------------------- НОВІ ФУНКЦІЇ ДЛЯ MEAL PLAN (реструктуризація) ---------------------------
 
-interface MealPlanEntryData {
+interface MealPlanUpdateRecipeData {
   mealPlanId: string;
-  recipeId: string;
   mealDate: string; // YYYY-MM-DD
   mealType: MealType;
+  recipeIds: string[]; // Масив ID рецептів для цього слоту
 }
 
-export async function addMealPlanEntryAction(data: MealPlanEntryData) {
+/**
+ * Видаляє всі рецепти з конкретного слоту планування (фактично видаляє MealPlanEntry)
+ */
+export async function clearMealPlanSlotAction({ mealPlanId, mealDate, mealType }: ClearMealPlanSlotProps) {
   try {
-    await prisma.mealPlanEntry.create({
-      data: {
-        mealPlan: { connect: { id: data.mealPlanId } },
-        recipe: { connect: { id: data.recipeId } },
-        mealDate: new Date(data.mealDate), // Конвертуємо назад у Date
-        mealType: data.mealType,
-      },
-    });
+    // Prisma очікує Date об'єкт для DateTime поля
+    // Переконайтеся, що mealDate вже є коректним Date об'єктом, що представляє початок дня UTC
+    // АБО, якщо ви все ще передаєте рядок, конвертуйте його тут:
+    // const mealDateObj = getStartOfDayUTC(mealDate); // Якщо mealDate є string YYYY-MM-DD
 
-    // Ревалідуємо шлях до сторінки планувальника, щоб оновити дані
-    revalidatePath('/meal-planner');
-  } catch (error) {
-    if (isNextRedirectError(error)) throw error;
-    console.error('Помилка при додаванні запису плану харчування:', error);
-    throw new Error('Не вдалося додати запис до плану харчування. Спробуйте ще раз.');
-  }
-}
-
-interface UpdateMealPlanEntryData {
-  mealPlanId?: string; // Може змінитись
-  recipeId?: string;
-  mealDate?: string;
-  mealType?: MealType;
-}
-
-export async function updateMealPlanEntryAction(id: string, data: UpdateMealPlanEntryData) {
-  try {
-    await prisma.mealPlanEntry.update({
-      where: { id: id },
-      data: {
-        mealPlan: data.mealPlanId ? { connect: { id: data.mealPlanId } } : undefined,
-        recipe: data.recipeId ? { connect: { id: data.recipeId } } : undefined,
-        mealDate: data.mealDate ? new Date(data.mealDate) : undefined,
-        mealType: data.mealType,
-      },
-    });
-    revalidatePath('/meal-planner');
-  } catch (error) {
-    if (isNextRedirectError(error)) throw error;
-    console.error('Помилка при оновленні запису плану харчування:', error);
-    throw new Error('Не вдалося оновити запис плану харчування. Спробуйте ще раз.');
-  }
-}
-
-export async function deleteMealPlanEntryAction(id: string) {
-  try {
     await prisma.mealPlanEntry.delete({
-      where: { id: id },
+      where: {
+        mealPlanId_mealDate_mealType: {
+          mealPlanId: mealPlanId,
+          mealDate: mealDate, // Використовуємо mealDate напряму, оскільки тепер він Date
+          mealType: mealType,
+        },
+      },
     });
+
     revalidatePath('/meal-planner');
+    return { success: true };
   } catch (error) {
-    if (isNextRedirectError(error)) throw error;
-    console.error('Помилка при видаленні запису плану харчування:', error);
-    throw new Error('Не вдалося видалити запис плану харчування. Спробуйте ще раз.');
+    console.error('Error clearing meal plan slot:', error);
+    // Важливо: перевіряйте тип помилки, щоб не видавати чутливу інформацію
+    if (error instanceof Error) {
+        throw new Error(`Failed to clear meal plan slot: ${error.message}`);
+    }
+    throw new Error('Failed to clear meal plan slot.');
+  }
+}
+
+// ... updateMealPlanSlotRecipesAction, createMealPlanIfNotExistsAction також повинні приймати Date для mealDate
+// Наприклад, для updateMealPlanSlotRecipesAction:
+interface UpdateMealPlanSlotRecipesProps {
+  mealPlanId: string;
+  mealDate: Date; // Змінено на Date
+  mealType: MealType;
+  recipeIds: string[];
+}
+
+export async function updateMealPlanSlotRecipesAction({ mealPlanId, mealDate, mealType, recipeIds }: UpdateMealPlanSlotRecipesProps) {
+  try {
+    // ... логіка
+    // Використовуємо mealDate напряму для записів Prisma
+    const mealPlanEntry = await prisma.mealPlanEntry.upsert({
+      where: {
+        mealPlanId_mealDate_mealType: {
+          mealPlanId: mealPlanId,
+          mealDate: mealDate, // Передаємо Date об'єкт
+          mealType: mealType,
+        },
+      },
+      // ... create і update частини
+      update: {
+        recipes: {
+          deleteMany: {}, // Видалити всі існуючі, щоб перезаписати
+          create: recipeIds.map(recipeId => ({
+            recipeId: recipeId,
+            // mealPlanEntryId: ..., // Це поле може бути автоматично встановлено Prisma при create
+          })),
+        },
+      },
+      create: {
+        mealPlan: { connect: { id: mealPlanId } },
+        mealDate: mealDate, // Передаємо Date об'єкт
+        mealType: mealType,
+        recipes: {
+          create: recipeIds.map(recipeId => ({
+            recipeId: recipeId,
+          })),
+        },
+      },
+      include: {
+        recipes: true,
+      },
+    });
+
+    revalidatePath('/meal-planner');
+    return mealPlanEntry;
+  } catch (error) {
+    console.error('Error updating meal plan slot recipes:', error);
+    if (error instanceof Error) {
+        throw new Error(`Failed to update meal plan slot recipes: ${error.message}`);
+    }
+    throw new Error('Failed to update meal plan slot recipes.');
   }
 }
