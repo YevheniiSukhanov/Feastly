@@ -48,10 +48,14 @@ export function formatFullDate(date: Date): string {
   return new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
-// Нова або оновлена функція для отримання дати початку дня в UTC
-export function getStartOfDayUTC(dateString: string): Date {
-  // Розбиваємо рядок YYYY-MM-DD
-  const [year, month, day] = dateString.split('-').map(Number);
-  // Створюємо дату в UTC (місяці в JS з 0)
-  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+/**
+ * Returns the start of the day (midnight) for a given Date object, in UTC.
+ * This function is used to normalize Date objects to the start of the day in UTC.
+ * @param date The Date object to normalize.
+ * @returns A new Date object representing the midnight (00:00:00.000) of that day in UTC.
+ */
+export function getStartOfDayUTC(date: Date): Date {
+    const d = new Date(date); // Створюємо новий об'єкт Date, щоб не змінювати оригінал
+    d.setUTCHours(0, 0, 0, 0); // Встановлюємо час на північ UTC
+    return d;
 }
